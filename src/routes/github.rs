@@ -21,32 +21,23 @@ pub async fn handle_gh(
     let body_bytes = body.as_ref();
 
     if !is_authorized(&headers, body_bytes, &config.github.webhook_secret) {
-        println!("Auth failed");
         return StatusCode::UNAUTHORIZED;
     }
 
     let json: Value = match serde_json::from_slice(body_bytes) {
-          Ok(json) => json,
-          Err(_) => {
-              println!("Failed to deserialize JSON");
-              return StatusCode::BAD_REQUEST;
-          },
-      };
+        Ok(json) => json,
+        Err(_) => {
+            return StatusCode::BAD_REQUEST;
+        }
+    };
 
     if !is_human_user(&json) {
-        println!("Human check failed");
         return StatusCode::OK;
     }
 
-    match post_to_webhook(config, json).await {
-        Ok(_) => {
-            println!("posting to webhook success");
-            StatusCode::OK
-        }
-        Err(_) => {
-            println!("posting to webhook fail");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+    match post_to_webhook(config, json, headers).await {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
@@ -73,8 +64,6 @@ fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
 }
 
 fn extract_signature(headers: &HeaderMap) -> Option<String> {
-    println!("extract_signature fn called");
-
     headers
         .get("x-hub-signature-256")
         .and_then(|hv| hv.to_str().ok())
@@ -82,19 +71,16 @@ fn extract_signature(headers: &HeaderMap) -> Option<String> {
 }
 
 fn is_human_user(json: &Value) -> bool {
-    println!("is_human_user fn called");
-
     json.get("sender")
         .and_then(|sender| sender.get("type"))
         .and_then(|user_type| user_type.as_str())
         .map_or(false, |user_type| user_type == "User")
 }
 
-async fn post_to_webhook(config: Config, json: Value) -> anyhow::Result<()> {
-    println!("post_to_webhook fn called");
-
+async fn post_to_webhook(config: Config, json: Value, headers: HeaderMap) -> anyhow::Result<()> {
     reqwest::Client::new()
         .post(config.github.target_webhook)
+        .headers(headers)
         .json(&json)
         .send()
         .await?;
