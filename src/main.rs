@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 mod commands;
 mod config;
 mod error;
@@ -46,7 +48,7 @@ async fn setup_bot(config: Config) -> anyhow::Result<()> {
         | serenity::GatewayIntents::GUILD_MESSAGES
         | serenity::GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
-    let register_guild_id = config.bot.guild_id.clone();
+    let register_guild_id = config.bot.guild_id;
     let bot_token = config.bot.token.clone();
 
     let framework = poise::Framework::builder()
@@ -98,10 +100,7 @@ async fn setup_webserver(config: Config) -> anyhow::Result<()> {
     ))
     .await?;
 
-    tracing::info!(
-        "Webserver listening on port {}.",
-        config.webserver.port
-    );
+    tracing::info!("Webserver listening on port {}.", config.webserver.port);
 
     axum::serve(
         listener,

@@ -1,48 +1,79 @@
 use axum::{
-    extract::{Request, State},
+    extract::State,
     http::{HeaderMap, StatusCode},
     Json,
 };
+use hmac::{Hmac, Mac};
 use serde_json::Value;
+use sha2::Sha256;
 
 use crate::config::Config;
 
-pub async fn handle_gh(state: State<Config>, headers: HeaderMap, body: Json<Value>) -> StatusCode {
-    let Some(headers) = extract_headers(&headers) else {
+type HmacSha256 = Hmac<Sha256>;
+
+pub async fn handle_gh(
+    State(config): State<Config>,
+    headers: HeaderMap,
+    body: Json<Value>,
+) -> StatusCode {
+    if !is_authorized(
+        &headers,
+        body.to_string().as_bytes(),
+        &config.github.webhook_secret,
+    ) {
         return StatusCode::UNAUTHORIZED;
+    }
+
+    if !is_human_user(&body) {
+        return StatusCode::OK;
+    }
+
+    match post_to_webhook(config, body).await {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
+    let signature = match extract_signature(headers) {
+        Some(s) => s,
+        None => return false,
     };
 
-    println!("{:#?}", headers);
-    println!("{:#?}", body);
+    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
 
-    StatusCode::OK
+    mac.update(body);
+    let result = mac.finalize();
+    let expected_signature = hex::encode(result.into_bytes());
+
+    signature == format!("sha256={}", expected_signature)
 }
 
-fn extract_headers(headers: &HeaderMap) -> Option<GithubHeaders> {
-    let content_type = headers.get("content-type")?.to_str().ok()?.to_string();
-    let github_event = headers.get("x-github-event")?.to_str().ok()?.to_string();
-    let signature_sha256 = headers
-        .get("x-hub-signature-256")?
-        .to_str()
-        .ok()?
-        .to_string();
-
-    Some(GithubHeaders {
-        content_type,
-        github_event,
-        signature_sha256,
-    })
+fn extract_signature(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-hub-signature-256")
+        .and_then(|hv| hv.to_str().ok())
+        .map(|s| s.trim_start_matches("sha256=").to_string())
 }
 
-// fn is_authorized(hash: &str) -> bool {
-//     let replaced = hash.replace("sha256=", "");
-// }
+fn is_human_user(json: &Value) -> bool {
+    json.get("sender")
+        .and_then(|sender| sender.get("type"))
+        .and_then(|user_type| user_type.as_str())
+        .map_or(false, |user_type| user_type == "User")
+}
 
-#[derive(Debug)]
-struct GithubHeaders {
-    content_type: String,
-    github_event: String,
-    signature_sha256: String,
+async fn post_to_webhook(config: Config, json: Json<Value>) -> anyhow::Result<()> {
+    reqwest::Client::new()
+        .post(config.github.target_webhook)
+        .json(&json.0)
+        .send()
+        .await?;
+
+    Ok(())
 }
 
 #[allow(unused)]

@@ -1,5 +1,5 @@
-pub mod ready;
 pub mod interaction_create;
+pub mod ready;
 
 use poise::serenity_prelude as serenity;
 
