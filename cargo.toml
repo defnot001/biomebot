@@ -1,0 +1,18 @@
+[package]
+name = "biometest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
+serenity = { version = "0.12.1", features = ["cache", "model"] }
+poise = { version = "0.6.1", features = ["handle_panics"] }
+axum = "0.7.4"
+axum-extra = { version = "0.9.2", features = ["typed-header"]}
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.115"
+chrono = { version = "0.4.37", features = ["serde"] }
+uuid = { version = "1.8.0", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0.81"
