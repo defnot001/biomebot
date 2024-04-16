@@ -18,15 +18,19 @@ pub async fn handle_gh(
     headers: HeaderMap,
     body: Bytes,
 ) -> StatusCode {
+    tracing::info!("Received POST request at /github");
+
     let body_bytes = body.as_ref();
 
     if !is_authorized(&headers, body_bytes, &config.github.webhook_secret) {
+        tracing::warn!("Unauthorized request at /github");
         return StatusCode::UNAUTHORIZED;
     }
 
     let json: Value = match serde_json::from_slice(body_bytes) {
         Ok(json) => json,
         Err(_) => {
+            tracing::warn!("Wrong formatted request at /github");
             return StatusCode::BAD_REQUEST;
         }
     };
@@ -36,8 +40,14 @@ pub async fn handle_gh(
     }
 
     match post_to_webhook(config, body, headers).await {
-        Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Ok(_) => {
+            tracing::info!("Forwarded github event to webhook");
+            StatusCode::OK
+        }
+        Err(e) => {
+            tracing::info!("Failed to forward github event: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
