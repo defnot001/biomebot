@@ -7,6 +7,7 @@ use axum::{
 use hmac::{Hmac, Mac};
 use serde_json::Value;
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 
 use crate::config::Config;
 
@@ -61,12 +62,14 @@ fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
     };
 
     mac.update(body);
-    let result = mac.finalize();
-    let expected_signature = hex::encode(result.into_bytes());
+    let calculated_signature = mac.finalize().into_bytes();
 
-    println!("{header_signature}\n{expected_signature}");
+    let header_signature = match hex::decode(header_signature) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
 
-    header_signature == format!("sha256={}", expected_signature)
+    header_signature.ct_eq(&calculated_signature).into()
 }
 
 fn extract_signature(headers: &HeaderMap) -> Option<String> {

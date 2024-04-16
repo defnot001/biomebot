@@ -194,6 +194,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "sha2",
+ "subtle",
  "tokio",
  "tracing",
  "tracing-subscriber",
