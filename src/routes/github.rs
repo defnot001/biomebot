@@ -50,7 +50,7 @@ pub async fn handle_gh(
 }
 
 fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
-    let signature = match extract_signature(headers) {
+    let header_signature = match extract_signature(headers) {
         Some(s) => s,
         None => return false,
     };
@@ -64,7 +64,9 @@ fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
     let result = mac.finalize();
     let expected_signature = hex::encode(result.into_bytes());
 
-    signature == format!("sha256={}", expected_signature)
+    println!("{header_signature}\n{expected_signature}");
+
+    header_signature == format!("sha256={}", expected_signature)
 }
 
 fn extract_signature(headers: &HeaderMap) -> Option<String> {
