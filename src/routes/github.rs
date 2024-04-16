@@ -35,7 +35,7 @@ pub async fn handle_gh(
         return StatusCode::OK;
     }
 
-    match post_to_webhook(config, json, headers).await {
+    match post_to_webhook(config, body, headers).await {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
@@ -77,11 +77,11 @@ fn is_human_user(json: &Value) -> bool {
         .map_or(false, |user_type| user_type == "User")
 }
 
-async fn post_to_webhook(config: Config, json: Value, headers: HeaderMap) -> anyhow::Result<()> {
+async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> anyhow::Result<()> {
     reqwest::Client::new()
         .post(config.github.target_webhook)
         .headers(headers)
-        .json(&json)
+        .body(body)
         .send()
         .await?;
 
