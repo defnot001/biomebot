@@ -31,6 +31,10 @@ fn extract_headers(headers: &HeaderMap) -> Option<GithubHeaders> {
     })
 }
 
+fn is_authorized(hash: &str) -> bool {
+    todo!()
+}
+
 #[derive(Debug)]
 struct GithubHeaders {
     content_type: String,
