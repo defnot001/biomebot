@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
     Json,
@@ -14,27 +15,29 @@ type HmacSha256 = Hmac<Sha256>;
 pub async fn handle_gh(
     State(config): State<Config>,
     headers: HeaderMap,
-    body: Json<Value>,
+    body: Bytes,
 ) -> StatusCode {
-    let test = body.to_string();
+    let body_bytes = body.as_ref();
 
-    println!("{test}");
-
-    if !is_authorized(
-        &headers,
-        body.to_string().as_bytes(),
-        &config.github.webhook_secret,
-    ) {
+    if !is_authorized(&headers, body_bytes, &config.github.webhook_secret) {
         println!("Auth failed");
         return StatusCode::UNAUTHORIZED;
     }
 
-    if !is_human_user(&body) {
+    let json: Value = match serde_json::from_slice(body_bytes) {
+          Ok(json) => json,
+          Err(_) => {
+              println!("Failed to deserialize JSON");
+              return StatusCode::BAD_REQUEST;
+          },
+      };
+
+    if !is_human_user(&json) {
         println!("Human check failed");
         return StatusCode::OK;
     }
 
-    match post_to_webhook(config, body).await {
+    match post_to_webhook(config, json).await {
         Ok(_) => {
             println!("posting to webhook success");
             StatusCode::OK
@@ -82,12 +85,12 @@ fn is_human_user(json: &Value) -> bool {
         .map_or(false, |user_type| user_type == "User")
 }
 
-async fn post_to_webhook(config: Config, json: Json<Value>) -> anyhow::Result<()> {
+async fn post_to_webhook(config: Config, json: Value) -> anyhow::Result<()> {
     println!("post_to_webhook fn called");
 
     reqwest::Client::new()
         .post(config.github.target_webhook)
-        .json(&json.0)
+        .json(&json)
         .send()
         .await?;
 
