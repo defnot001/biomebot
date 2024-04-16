@@ -1,16 +1,19 @@
 use axum::{
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
+    Json,
 };
+use serde_json::Value;
 
 use crate::config::Config;
 
-pub async fn handle_gh(state: State<Config>, req: Request) -> StatusCode {
-    let Some(headers) = extract_headers(req.headers()) else {
+pub async fn handle_gh(state: State<Config>, headers: HeaderMap, body: Json<Value>) -> StatusCode {
+    let Some(headers) = extract_headers(&headers) else {
         return StatusCode::UNAUTHORIZED;
     };
 
     println!("{:#?}", headers);
+    println!("{:#?}", body);
 
     StatusCode::OK
 }
@@ -31,9 +34,9 @@ fn extract_headers(headers: &HeaderMap) -> Option<GithubHeaders> {
     })
 }
 
-fn is_authorized(hash: &str) -> bool {
-    todo!()
-}
+// fn is_authorized(hash: &str) -> bool {
+//     let replaced = hash.replace("sha256=", "");
+// }
 
 #[derive(Debug)]
 struct GithubHeaders {
