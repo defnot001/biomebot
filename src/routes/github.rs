@@ -88,15 +88,13 @@ fn is_human_user(json: &Value) -> bool {
 }
 
 async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> anyhow::Result<()> {
-    println!("{:#?}", headers);
-
     let mut forward_headers = HeaderMap::new();
 
     for (key, value) in headers.iter() {
-         if key != "authorization" && key != "host" {
-             forward_headers.insert(key.clone(), value.clone());
-         }
-     }
+        if key != "authorization" && key != "host" {
+            forward_headers.insert(key.clone(), value.clone());
+        }
+    }
 
     let res = reqwest::Client::new()
         .post(config.github.target_webhook)
@@ -105,7 +103,9 @@ async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> any
         .send()
         .await?;
 
-    println!("{:#?}", res);
+    if !res.status().is_success() {
+        anyhow::bail!("Failed to send message to webhook: {}", res.status())
+    }
 
     Ok(())
 }
