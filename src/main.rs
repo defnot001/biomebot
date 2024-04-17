@@ -10,6 +10,7 @@ mod util;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use axum::{routing::post, Router};
+use commands::languages;
 use config::Config;
 use events::event_handler;
 use poise::serenity_prelude as serenity;
@@ -53,7 +54,7 @@ async fn setup_bot(config: Config) -> anyhow::Result<()> {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![],
+            commands: vec![languages::languages()],
             event_handler: |ctx, event, framework, _data| {
                 Box::pin(event_handler(ctx, event, framework))
             },
