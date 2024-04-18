@@ -5,7 +5,6 @@ use axum::{
     body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
-    Json,
 };
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
@@ -17,7 +16,7 @@ use serenity::all::{
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
-use crate::{config::Config, Data};
+use crate::Data;
 
 #[derive(Debug)]
 enum GithubEvent {
