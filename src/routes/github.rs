@@ -11,6 +11,9 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::Value;
+use serenity::all::{
+    CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, ExecuteWebhook, Http, Webhook,
+};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
@@ -147,6 +150,21 @@ struct GithubIssueLabelEvent {
     sender: GithubUser,
 }
 
+impl GithubIssueLabelEvent {
+    /// This function returns true when multiple conditions are met at the same time:
+    ///
+    /// The issue has to be open.
+    /// The label `good-first-issue` was added.
+    fn should_report(&self) -> bool {
+        self.action == "labeled"
+            && self.issue.state == "open"
+            && self
+                .label
+                .as_ref()
+                .map_or(false, |label| label.name == "good first issue")
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct GithubIssue {
     /// can be one of `resolved`, `off-topic`, `too heated`, `spam` or `None`
@@ -162,6 +180,7 @@ struct GithubIssue {
     state: String,
     title: String,
     url: String,
+    html_url: String,
     user: Option<GithubUser>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -175,6 +194,7 @@ struct GithubUser {
     #[serde(rename = "type")]
     /// Can be one of: `Bot`, `User`, `Organization`, `Mannequin`
     user_type: Option<String>,
+    avatar_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,7 +232,7 @@ pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes
     }
 
     if is_issues_event(&headers) {
-        match handle_issues(body_bytes).await {
+        match handle_issues(body_bytes, data).await {
             Ok(_) => return StatusCode::OK,
             Err(e) => {
                 tracing::error!("Error processing github event: {e}");
@@ -233,7 +253,7 @@ pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes
         return StatusCode::OK;
     }
 
-    match post_to_webhook(data.config.github.activity_webhook, body, headers).await {
+    match post_to_activity_webhook(data.config.github.activity_webhook, body, headers).await {
         Ok(_) => {
             tracing::info!("Forwarded github event to webhook.");
             StatusCode::OK
@@ -289,7 +309,7 @@ fn is_human_user(json: &Value) -> bool {
         .map_or(false, |user_type| user_type == "User")
 }
 
-async fn post_to_webhook(
+async fn post_to_activity_webhook(
     activity_webhook: String,
     body: Bytes,
     headers: HeaderMap,
@@ -316,14 +336,21 @@ async fn post_to_webhook(
     Ok(())
 }
 
-async fn handle_issues(body: &[u8]) -> anyhow::Result<()> {
+async fn handle_issues(body: &[u8], data: Data) -> anyhow::Result<()> {
     if !get_issue_action(body)?.is_label() {
         return Ok(());
     }
 
-    let json: GithubIssueLabelEvent = serde_json::from_slice(body)?;
+    let label_event: GithubIssueLabelEvent = serde_json::from_slice(body)?;
 
-    println!("{:#?}", json);
+    if label_event.should_report() {
+        post_good_first_issue(
+            label_event,
+            &data.config.github.issues_webhook,
+            &data.config.bot.token,
+        )
+        .await?
+    }
 
     Ok(())
 }
@@ -336,6 +363,36 @@ fn get_issue_action(body: &[u8]) -> anyhow::Result<GithubIssuesAction> {
             .as_str()
             .context("Field `action` on issues json body is not a string.")?,
     )
+}
+
+async fn post_good_first_issue(
+    label_event: GithubIssueLabelEvent,
+    issues_webhook_url: &str,
+    bot_token: &str,
+) -> anyhow::Result<()> {
+    let http = Http::new(bot_token);
+    let webhook = Webhook::from_url(&http, issues_webhook_url).await?;
+
+    let description = format!("**{}** just added label `good-first-issue` to [issue #{}]({}) ({}) in the {} repository. This is a good chance to get your first contribution!", label_event.sender.login, label_event.issue.number, label_event.issue.html_url, label_event.issue.title, label_event.repository.name);
+    let embed_author = if let Some(avatar_url) = label_event.sender.avatar_url {
+        CreateEmbedAuthor::new(label_event.sender.login).icon_url(avatar_url)
+    } else {
+        CreateEmbedAuthor::new(label_event.sender.login)
+    };
+
+    let embed = CreateEmbed::new()
+        .color(6_530_042) // biome logo color
+        .author(embed_author)
+        .title("New good first issue alert")
+        .description(description)
+        .footer(CreateEmbedFooter::new("Biome Issue Tracker"))
+        .timestamp(chrono::Utc::now());
+
+    webhook
+        .execute(&http, false, ExecuteWebhook::default().embed(embed))
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

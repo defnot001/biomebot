@@ -1,10 +1,11 @@
 use poise::serenity_prelude as serenity;
 use serde::Deserialize;
-use serenity::GuildId;
+use serenity::{GuildId, RoleId};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub bot: BotConfig,
+    pub roles: RoleConfig,
     pub github: GithubConfig,
     pub webserver: WebserverConfig,
     pub database: DatabaseConfig,
@@ -23,6 +24,11 @@ impl Config {
 pub struct BotConfig {
     pub token: String,
     pub guild_id: GuildId,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RoleConfig {
+    pub good_first_issue: RoleId,
 }
 
 #[derive(Debug, Clone, Deserialize)]
