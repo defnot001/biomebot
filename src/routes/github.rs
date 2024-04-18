@@ -373,7 +373,14 @@ async fn post_good_first_issue(
     let http = Http::new(bot_token);
     let webhook = Webhook::from_url(&http, issues_webhook_url).await?;
 
-    let description = format!("**{}** just added label `good-first-issue` to [issue #{}]({}) ({}) in the {} repository. This is a good chance to get your first contribution!", label_event.sender.login, label_event.issue.number, label_event.issue.html_url, label_event.issue.title, label_event.repository.name);
+    let description = format!("**{}** just added label `good-first-issue` to [issue #{}]({}) ({}) in the {} repository. This is a good chance to get your first contribution!",
+        label_event.sender.login,
+        label_event.issue.number,
+        label_event.issue.html_url,
+        label_event.issue.title,
+        label_event.repository.name
+    );
+
     let embed_author = if let Some(avatar_url) = label_event.sender.avatar_url {
         CreateEmbedAuthor::new(label_event.sender.login).icon_url(avatar_url)
     } else {
