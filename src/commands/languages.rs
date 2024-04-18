@@ -1,11 +1,8 @@
 use std::{fmt::Display, str::FromStr};
 
-use poise::serenity_prelude as serenity;
-use poise::CreateReply;
 use scraper::{selectable::Selectable, Html, Selector};
-use serenity::{CreateEmbed, User};
 
-use crate::{util::embeds::default_embed, Context};
+use crate::Context;
 
 #[derive(Debug)]
 struct LanguageFeature {
@@ -16,17 +13,73 @@ struct LanguageFeature {
 }
 
 impl LanguageFeature {
-    fn to_embed_field(&self) -> (String, String, bool) {
-        let value = format!(
-            "Parsing {} \u{00A0}\u{00A0} Formatting {} \u{00A0}\u{00A0} Linting {}",
-            self.parsing, self.formatting, self.linting
-        );
+    fn support_level_to_vec(&self) -> Vec<LanguageSupportLevel> {
+        vec![self.parsing, self.formatting, self.linting]
+    }
 
-        (self.language_name.clone(), value, false)
+    pub fn is_fully_supported(&self) -> bool {
+        self.support_level_to_vec()
+            .iter()
+            .all(|i| matches!(i, LanguageSupportLevel::Supported))
+    }
+
+    fn is_partially_supported(&self) -> bool {
+        self.support_level_to_vec()
+            .iter()
+            .any(|i| matches!(i, LanguageSupportLevel::PartiallySupported))
+    }
+
+    fn is_work_in_progress(&self) -> bool {
+        self.support_level_to_vec()
+            .iter()
+            .any(|i| matches!(i, LanguageSupportLevel::InProgress))
+    }
+
+    fn is_not_supported(&self) -> bool {
+        self.support_level_to_vec()
+            .iter()
+            .all(|i| matches!(i, LanguageSupportLevel::NotInProgress))
     }
 }
 
 #[derive(Debug)]
+struct SupportedLanguages {
+    full: Vec<String>,
+    partial: Vec<String>,
+    wip: Vec<String>,
+    nope: Vec<String>,
+}
+
+impl From<Vec<LanguageFeature>> for SupportedLanguages {
+    fn from(languages: Vec<LanguageFeature>) -> Self {
+        let mut full = Vec::new();
+        let mut partial = Vec::new();
+        let mut wip = Vec::new();
+        let mut nope = Vec::new();
+
+        for language in languages {
+            if language.is_fully_supported() {
+                full.push(language.language_name)
+            } else if language.is_partially_supported() {
+                partial.push(language.language_name)
+            } else if language.is_work_in_progress() {
+                wip.push(language.language_name)
+            } else if language.is_not_supported() {
+                nope.push(language.language_name)
+            }
+        }
+
+        Self {
+            full,
+            partial,
+            wip,
+            nope,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+#[repr(u8)]
 enum LanguageSupportLevel {
     Supported,
     InProgress,
@@ -69,9 +122,9 @@ pub async fn languages(ctx: Context<'_>) -> anyhow::Result<()> {
     ctx.defer().await?;
 
     let language_features = scrape_language_support().await?;
-    let embed = build_language_support_embed(ctx.author(), language_features);
 
-    ctx.send(CreateReply::default().embed(embed)).await?;
+    ctx.say(build_language_support_message(language_features))
+        .await?;
 
     Ok(())
 }
@@ -131,21 +184,27 @@ fn parse_selector(sel: &str) -> anyhow::Result<Selector> {
     }
 }
 
-fn build_language_support_embed(
-    interaction_user: &User,
-    language_features: Vec<LanguageFeature>,
-) -> CreateEmbed {
-    let website_link = "You can find more details on [our website](https://biomejs.dev/internals/language-support/).";
-    let legend = "\u{2705} Supported\n\u{1F6AB} Not in progress\n\u{231B}\u{FE0F} In progress\n\u{26A0}\u{FE0F}: Partially supported";
-    let fields = language_features
-        .into_iter()
-        .map(|f| f.to_embed_field())
-        .collect::<Vec<_>>();
+fn build_language_support_message(language_features: Vec<LanguageFeature>) -> String {
+    let titles = [
+        "## :white_check_mark: Full Support",
+        "## :warning: Partial Support",
+        "## :hourglass_flowing_sand: Working on it",
+        "## :no_entry: Not Yet Supported",
+    ];
 
-    let description = format!("{website_link}\n\n{legend}");
+    let supported = SupportedLanguages::from(language_features);
 
-    default_embed(interaction_user)
-        .title("Biome's Currently Supported Languages")
-        .description(description)
-        .fields(fields)
+    let languages = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+        titles[0],
+        supported.full.join(", "),
+        titles[1],
+        supported.partial.join(", "),
+        titles[2],
+        supported.wip.join(", "),
+        titles[3],
+        supported.nope.join(", "),
+    );
+
+    format!("{languages}\nYou can find more details on [our website](https://biomejs.dev/internals/language-support/).")
 }
