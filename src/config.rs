@@ -28,7 +28,8 @@ pub struct BotConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct GithubConfig {
     pub webhook_secret: String,
-    pub target_webhook: String,
+    pub activity_webhook: String,
+    pub issues_webhook: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

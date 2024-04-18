@@ -1,15 +1,203 @@
+use std::{fmt::Display, str::FromStr};
+
+use anyhow::Context;
 use axum::{
     body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
     Json,
 };
+use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
 use crate::{config::Config, Data};
+
+#[derive(Debug)]
+enum GithubEvent {
+    Issues,
+    PullRequest,
+}
+
+impl Display for GithubEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Issues => write!(f, "issues"),
+            Self::PullRequest => write!(f, "pull_request"),
+        }
+    }
+}
+
+impl FromStr for GithubEvent {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "issues" => Ok(Self::Issues),
+            "pull_request" => Ok(Self::PullRequest),
+            _ => {
+                anyhow::bail!("Received unrecognized event: {s}");
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+enum GithubIssuesAction {
+    /// An issue was assigned to a user.
+    Assigned,
+    /// An issue was closed.
+    Closed,
+    /// An issue was deleted.
+    Deleted,
+    /// An issue was removed from a milestone.
+    Demilestoned,
+    /// The title or body on an issue was edited.
+    Edited,
+    /// A label was added to an issue.
+    Labeled,
+    /// Conversation on an issue was locked.
+    Locked,
+    /// An issue was added to a milestone.
+    Milestoned,
+    /// An issue was created. When a closed issue is reopened, the action will be `reopened` instead.
+    Opened,
+    /// An issue was pinned to a repository.
+    Pinned,
+    /// A closed issue was reopened.
+    Reopened,
+    /// An issue was transferred to another repository.
+    Transferred,
+    /// A user was unassigned from an issue.
+    Unassigned,
+    /// A label was removed from an issue.
+    Unlabeled,
+    /// Conversation on an issue was locked. The official github docs are wrong on this one.
+    Unlocked,
+    /// An issue was unpinned from a repository.
+    Unpinned,
+}
+
+impl Display for GithubIssuesAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Assigned => write!(f, "assigned"),
+            Self::Closed => write!(f, "closed"),
+            Self::Deleted => write!(f, "deleted"),
+            Self::Demilestoned => write!(f, "demilestoned"),
+            Self::Edited => write!(f, "edited"),
+            Self::Labeled => write!(f, "labeled"),
+            Self::Locked => write!(f, "locked"),
+            Self::Milestoned => write!(f, "milestoned"),
+            Self::Opened => write!(f, "opened"),
+            Self::Pinned => write!(f, "pinned"),
+            Self::Reopened => write!(f, "reopened"),
+            Self::Transferred => write!(f, "transferred"),
+            Self::Unassigned => write!(f, "unassigned"),
+            Self::Unlabeled => write!(f, "unlabeled"),
+            Self::Unlocked => write!(f, "unlocked"),
+            Self::Unpinned => write!(f, "unpinned"),
+        }
+    }
+}
+
+impl FromStr for GithubIssuesAction {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "assigned" => Ok(Self::Assigned),
+            "closed" => Ok(Self::Closed),
+            "deleted" => Ok(Self::Deleted),
+            "demilestoned" => Ok(Self::Demilestoned),
+            "edited" => Ok(Self::Edited),
+            "labeled" => Ok(Self::Labeled),
+            "locked" => Ok(Self::Locked),
+            "milestoned" => Ok(Self::Milestoned),
+            "opened" => Ok(Self::Opened),
+            "pinned" => Ok(Self::Pinned),
+            "reopened" => Ok(Self::Reopened),
+            "transferred" => Ok(Self::Transferred),
+            "unassigned" => Ok(Self::Unassigned),
+            "unlabeled" => Ok(Self::Unlabeled),
+            "unlocked" => Ok(Self::Unlocked),
+            "unpinned" => Ok(Self::Unpinned),
+            _ => {
+                anyhow::bail!("Unknown Github Issue Action: {s}");
+            }
+        }
+    }
+}
+
+impl GithubIssuesAction {
+    fn is_label(&self) -> bool {
+        matches!(self, Self::Labeled | Self::Unlabeled)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubIssueLabelEvent {
+    action: String,
+    issue: GithubIssue,
+    label: Option<GithubIssueLabel>,
+    repository: GithubRepository,
+    sender: GithubUser,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubIssue {
+    /// can be one of `resolved`, `off-topic`, `too heated`, `spam` or `None`
+    active_lock_reason: Option<String>,
+    assignees: Vec<Option<GithubUser>>,
+    author_association: String,
+    body: Option<String>,
+    labels: Vec<GithubIssueLabel>,
+    node_id: String,
+    number: i64,
+    repository_url: String,
+    /// State of the issue; either 'open' or 'closed'
+    state: String,
+    title: String,
+    url: String,
+    user: Option<GithubUser>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    closed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubUser {
+    id: u64,
+    login: String,
+    #[serde(rename = "type")]
+    /// Can be one of: `Bot`, `User`, `Organization`, `Mannequin`
+    user_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubIssueLabel {
+    /// 6-character hex code, without the leading #, identifying the color
+    color: String,
+    default: bool,
+    description: Option<String>,
+    id: u64,
+    /// The name of the label.
+    name: String,
+    node_id: String,
+    url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubRepository {
+    id: i64,
+    node_id: String,
+    name: String,
+    full_name: String,
+    private: bool,
+}
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -21,6 +209,16 @@ pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes
     if !is_authorized(&headers, body_bytes, &data.config.github.webhook_secret) {
         tracing::warn!("Unauthorized request at /github!");
         return StatusCode::UNAUTHORIZED;
+    }
+
+    if is_issues_event(&headers) {
+        match handle_issues(body_bytes).await {
+            Ok(_) => return StatusCode::OK,
+            Err(e) => {
+                tracing::error!("Error processing github event: {e}");
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            }
+        }
     }
 
     let json: Value = match serde_json::from_slice(body_bytes) {
@@ -35,7 +233,7 @@ pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes
         return StatusCode::OK;
     }
 
-    match post_to_webhook(data.config, body, headers).await {
+    match post_to_webhook(data.config.github.activity_webhook, body, headers).await {
         Ok(_) => {
             tracing::info!("Forwarded github event to webhook.");
             StatusCode::OK
@@ -45,6 +243,14 @@ pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }
+}
+
+fn is_issues_event(headers: &HeaderMap) -> bool {
+    let Some(event_header) = headers.get("x-github-event").and_then(|h| h.to_str().ok()) else {
+        return false;
+    };
+
+    matches!(GithubEvent::from_str(event_header), Ok(GithubEvent::Issues))
 }
 
 fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
@@ -83,7 +289,11 @@ fn is_human_user(json: &Value) -> bool {
         .map_or(false, |user_type| user_type == "User")
 }
 
-async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> anyhow::Result<()> {
+async fn post_to_webhook(
+    activity_webhook: String,
+    body: Bytes,
+    headers: HeaderMap,
+) -> anyhow::Result<()> {
     let mut forward_headers = HeaderMap::new();
 
     for (key, value) in headers.iter() {
@@ -93,7 +303,7 @@ async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> any
     }
 
     let res = reqwest::Client::new()
-        .post(config.github.target_webhook)
+        .post(activity_webhook)
         .headers(forward_headers)
         .body(body)
         .send()
@@ -104,6 +314,28 @@ async fn post_to_webhook(config: Config, body: Bytes, headers: HeaderMap) -> any
     }
 
     Ok(())
+}
+
+async fn handle_issues(body: &[u8]) -> anyhow::Result<()> {
+    if !get_issue_action(body)?.is_label() {
+        return Ok(());
+    }
+
+    let json: GithubIssueLabelEvent = serde_json::from_slice(body)?;
+
+    println!("{:#?}", json);
+
+    Ok(())
+}
+
+fn get_issue_action(body: &[u8]) -> anyhow::Result<GithubIssuesAction> {
+    GithubIssuesAction::from_str(
+        serde_json::from_slice::<Value>(body)?
+            .get("action")
+            .context("Json body for issue event is missing required `action` field")?
+            .as_str()
+            .context("Field `action` on issues json body is not a string.")?,
+    )
 }
 
 #[cfg(test)]
