@@ -7,6 +7,7 @@ pub struct Config {
     pub bot: BotConfig,
     pub github: GithubConfig,
     pub webserver: WebserverConfig,
+    pub database: DatabaseConfig,
 }
 
 impl Config {
@@ -34,4 +35,9 @@ pub struct GithubConfig {
 pub struct WebserverConfig {
     pub host: [u8; 4],
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DatabaseConfig {
+    pub url: String,
 }

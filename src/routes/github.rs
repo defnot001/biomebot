@@ -9,20 +9,16 @@ use serde_json::Value;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
-use crate::config::Config;
+use crate::{config::Config, Data};
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub async fn handle_gh(
-    State(config): State<Config>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> StatusCode {
+pub async fn handle_gh(State(data): State<Data>, headers: HeaderMap, body: Bytes) -> StatusCode {
     tracing::info!("Received POST request at /github.");
 
     let body_bytes = body.as_ref();
 
-    if !is_authorized(&headers, body_bytes, &config.github.webhook_secret) {
+    if !is_authorized(&headers, body_bytes, &data.config.github.webhook_secret) {
         tracing::warn!("Unauthorized request at /github!");
         return StatusCode::UNAUTHORIZED;
     }
@@ -39,7 +35,7 @@ pub async fn handle_gh(
         return StatusCode::OK;
     }
 
-    match post_to_webhook(config, body, headers).await {
+    match post_to_webhook(data.config, body, headers).await {
         Ok(_) => {
             tracing::info!("Forwarded github event to webhook.");
             StatusCode::OK
