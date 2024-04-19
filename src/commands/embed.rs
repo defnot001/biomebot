@@ -57,7 +57,7 @@ pub async fn simple(
         .await
     {
         Ok(_) => {
-            ctx.say(format!("Successfully posted embed in {channel} channel"))
+            ctx.say(format!("Successfully posted embed in {channel} channel."))
                 .await?;
         }
         Err(e) => {
