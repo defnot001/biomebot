@@ -2,6 +2,8 @@ use poise::serenity_prelude as serenity;
 use serde::Deserialize;
 use serenity::{GuildId, RoleId};
 
+use crate::commands::embed::TargetChannelWebhook;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub bot: BotConfig,
@@ -9,6 +11,7 @@ pub struct Config {
     pub github: GithubConfig,
     pub webserver: WebserverConfig,
     pub database: DatabaseConfig,
+    pub webhooks: WebhookConfig,
 }
 
 impl Config {
@@ -17,6 +20,13 @@ impl Config {
         let reader = std::io::BufReader::new(config_file);
 
         serde_json::from_reader(reader).expect("Failed to parse config.json")
+    }
+
+    pub fn webhook_url(&self, channel: TargetChannelWebhook) -> &str {
+        match channel {
+            TargetChannelWebhook::Roles => &self.webhooks.roles,
+            TargetChannelWebhook::Rules => &self.webhooks.rules,
+        }
     }
 }
 
@@ -47,4 +57,10 @@ pub struct WebserverConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WebhookConfig {
+    pub rules: String,
+    pub roles: String,
 }
