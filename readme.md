@@ -9,3 +9,4 @@ _Note: This bot is only a proof-of concept and is currently not being used. Ther
 - [x] **Webserver**: Filter github webhook events and only forward the ones that came from human users.
 - [x] **Command**: `languages` shows the support level of Biome's supported languages by scraping the website.
 - [x] **Webserver**: Post issues into a special channel when a `good-first-issue` label gets added to it.
+- [x] **Command**: `embed` command to post rich embeds to a discord webhook. Can be useful for displaying rules in a nicer way. Defaults to admin only.
