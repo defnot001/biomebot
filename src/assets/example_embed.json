@@ -1,0 +1,49 @@
+{
+  "title": "Title better not be too long. 256 code points max.",
+  "description": "This can be a very very very long description.\nDefinitly not more than 2048 Unicode code points however.",
+  "fields": [
+    {
+      "name": "Are fields nice?",
+      "value": "Yes"
+    },
+    {
+      "name": "How large can one be?",
+      "value": "The `name` can be 256 characters, the value can be `1024` characters."
+    },
+    {
+      "name": "How many can I have in one embed?",
+      "value": "Up to 25!"
+    },
+    {
+      "name": "What else should I know?",
+      "value": "You can inline the fields to make them show up next to each other if they fit.",
+      "inline": true
+    },
+    {
+      "name": "How large can the whole embed be?",
+      "value": "If you sum all characters in there from any property, 6000 is the max."
+    },
+    {
+      "name": "What's the format of the timestamp?",
+      "value": "Any ISO8601 timestamp will work."
+    }
+  ],
+  "timestamp": "2024-04-20T18:30:05Z",
+  "color": 16744272,
+  "author": {
+    "name": "Biome Bot",
+    "icon_url": "https://cdn.discordapp.com/icons/1132231889290285117/764b078549cc44abc18e8af6ca208a66.webp"
+  },
+  "footer": {
+    "text": "I love footers",
+    "icon_url": "https://cdn.discordapp.com/avatars/471026181211422721/cc06a535d3eb36eaa0831b32b880d632"
+  },
+  "thumbnail": {
+    "url": "https://cdn.discordapp.com/icons/1132231889290285117/764b078549cc44abc18e8af6ca208a66.webp"
+  },
+  "image": {
+    "url": "https://cdn.discordapp.com/icons/1132231889290285117/764b078549cc44abc18e8af6ca208a66.webp",
+    "width": 250,
+    "height": 250
+  }
+}

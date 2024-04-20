@@ -1,4 +1,5 @@
 use poise::FrameworkError;
+use std::error::Error;
 
 use crate::Context as AppContext;
 use crate::Data;
@@ -94,15 +95,24 @@ pub async fn error_handler<'a>(
     }
 }
 
-pub async fn respond_error(
-    message: impl AsRef<str>,
-    error: impl std::fmt::Debug,
-    context: &AppContext<'_>,
-) -> anyhow::Result<()> {
-    let message = message.as_ref();
+#[macro_export]
+macro_rules! respond_error {
+    ($msg: literal, $err: expr, $ctx: expr) => {
+        tracing::error!("{}: {:#?}", $msg, $err);
+        $ctx.say(format!("{}.", $msg)).await?;
+        return Ok(());
+    };
+}
 
-    tracing::error!("{}: {:#?}", message, error);
-    context.say(format!("{}.", message)).await?;
-
-    Ok(())
+#[macro_export]
+macro_rules! respond_mistake {
+    ($ctx: expr, $msg: literal) => {
+        tracing::warn!(
+            "{} invoked /{} but they made a mistake.",
+            $ctx.author(),
+            $ctx.command().name
+        );
+        $ctx.say($msg).await?;
+        return Ok(());
+    };
 }
